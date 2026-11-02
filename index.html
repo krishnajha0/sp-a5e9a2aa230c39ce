@@ -27,6 +27,7 @@ h2{font-size:22px;margin:28px 0 10px}
 .row{display:flex;flex-wrap:wrap;gap:10px;margin:14px 0}
 button.btn{font-size:18px;padding:13px 18px;border-radius:12px;border:2px solid #cfd8e6;background:#fff;color:#1c2430;cursor:pointer;min-height:48px;font-family:inherit}
 button.btn.primary{background:#2f6fed;border-color:#2f6fed;color:#fff}
+button.btn.primary.live{background:#d93838;border-color:#d93838}
 button.btn:disabled{opacity:.5;cursor:default}
 button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:transform .08s ease,box-shadow .08s ease,filter .08s ease}
 button.btn,.tab,.rg{box-shadow:0 3px 0 rgba(20,30,50,.18)}
@@ -57,7 +58,8 @@ ol{padding-left:22px} li{margin:6px 0}
 
   <div class="card">
     <div class="tabs">
-      <button class="tab on" id="tabAll">All words (<span id="nAll"></span>)</button>
+      <button class="tab on" id="tabHard">Hardest words (<span id="nHard"></span>)</button>
+      <button class="tab" id="tabAll">All words (<span id="nAll"></span>)</button>
       <button class="tab" id="tabCirc">Circled words (<span id="nCirc"></span>)</button>
       <button class="tab" id="tabMissed">Missed words (<span id="nMissed">0</span>)</button>
     </div>
@@ -151,14 +153,25 @@ function lettersFrom(transcript,word){
 function loadMissed(){try{var m=JSON.parse(localStorage.getItem(STORE)||"[]");return m.filter(function(i){return typeof i==="number"&&i>=1&&i<=WORDS.length;});}catch(e){return [];}}
 function saveMissed(){try{localStorage.setItem(STORE,JSON.stringify(missed));}catch(e){}}
 function byNum(n){return WORDS[n-1];}
+function hardScore(x){
+  var w=plain(x.w),L=letters(x.w).length,sc=0;
+  sc+=x.n/450*6;sc+=Math.max(0,L-6)*0.7;if(x.c)sc+=3;if(x.alt.length)sc+=1.5;
+  if(/[^a-z \-']/.test(String(x.w).toLowerCase()))sc+=1.5;
+  if(/ph|ps|pn|rh|gh|ch|sc|que|ough|eau|ae|oe|y[^aeiou]|zz|cc|ss|ll|rr|mm|nn|pp|tt|ff/.test(w))sc+=1.5;
+  if(/[xzqjk]/.test(w))sc+=0.8;if(/geographical/.test(x.p))sc+=0.5;
+  return sc;
+}
+WORDS.forEach(function(x){x.hs=hardScore(x);});
+var HARD=(function(){var s=WORDS.slice().sort(function(a,b){return b.hs-a.hs;}).slice(0,150);var m={};s.forEach(function(x){m[x.n]=1;});return m;})();
 
 var missed=loadMissed();
-var mode="all",range="all",order=[],pos=0,checked=null,shown=[],right=0,tries=0,listening=false,micMsg="",answer="";
+var mode="hard",range="all",order=[],pos=0,checked=null,shown=[],right=0,tries=0,listening=false,micMsg="",answer="";
 
 function pool(m,r){
   var rg=RANGES.filter(function(x){return x[0]===r;})[0];
   var list=WORDS.filter(function(x){return x.n>=rg[2]&&x.n<=rg[3];});
   if(m==="circled")list=list.filter(function(x){return x.c;});
+  if(m==="hard"){list=list.filter(function(x){return HARD[x.n];}).sort(function(a,b){return b.hs-a.hs;});}
   return list.map(function(x){return x.n;});
 }
 function isCorrect(cur,ans){
@@ -180,6 +193,8 @@ function spokenLetters(w){return w.split("").map(function(c){return c===" "?"spa
 function render(){
   $("nAll").textContent=pool("all",range).length;
   $("nCirc").textContent=pool("circled",range).length;
+  $("nHard").textContent=pool("hard",range).length;
+  $("tabHard").className="tab"+(mode==="hard"?" on":"");
   $("nMissed").textContent=missed.length;
   $("tabAll").className="tab"+(mode==="all"?" on":"");
   $("tabCirc").className="tab"+(mode==="circled"?" on":"");
@@ -207,7 +222,7 @@ function render(){
     h+='<input type="text" id="ans" placeholder="Type the spelling" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" '+(checked!==null?'disabled ':'')+'value="'+esc(answer)+'">';
     h+='<div class="row">';
     if(checked===null){
-      h+='<button class="btn primary" id="bMic"'+(listening?' disabled':'')+'>🎤 '+(listening?'Listening...':'Spell it out loud')+'</button>'+
+      h+='<button class="btn primary'+(listening?' live':'')+'" id="bMic">'+(listening?'⏹ Stop listening':'🎤 Spell it out loud')+'</button>'+
          '<button class="btn" id="bCheck">Check spelling</button>';
     }else{
       h+='<button class="btn primary" id="bNext">Next word</button>';
@@ -260,6 +275,7 @@ function reveal(label,text){
   speak(text);render();
 }
 function check(){
+  if(listening){stopListening();}
   var inp=$("ans");if(inp)answer=inp.value;
   var cur=byNum(order[pos]);
   if(!cur||checked!==null||answer.trim()==="")return;
@@ -271,45 +287,56 @@ function check(){
   render();
 }
 function next(){
+  stopListening();
   pos++;answer="";checked=null;shown=[];micMsg="";
   render();
   if(pos<order.length)speak("Your word is "+byNum(order[pos]).w+".");
 }
 function start(m){
+  stopListening();
   var list=m==="missed"?missed.slice():pool(m,range);
   if(m==="missed"&&!list.length)return;
   mode=m;
-  order=$("rand").checked?shuffle(list):list.sort(function(a,b){return a-b;});
+  order=$("rand").checked?shuffle(list):(m==="hard"?list:list.sort(function(a,b){return a-b;}));
   pos=0;answer="";checked=null;shown=[];right=0;tries=0;micMsg="";
   render();
 }
+var rec=null,recTimer=null;
+function stopListening(){
+  if(recTimer){clearTimeout(recTimer);recTimer=null;}
+  var r=rec;rec=null;listening=false;
+  if(r){try{r.onend=null;r.stop();}catch(e){try{r.abort();}catch(e2){}}}
+}
 function listen(){
+  if(listening){stopListening();if(micMsg.indexOf("Listening")===0)micMsg="";render();return;}
   var cur=byNum(order[pos]);if(!cur||checked!==null)return;
   var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
   if(!SR){micMsg="This browser can't listen. Try Chrome or Safari, or type the spelling instead.";render();return;}
   try{
     stopSpeech();
-    var rec=new SR();rec.lang="en-US";rec.interimResults=false;rec.maxAlternatives=1;
+    rec=new SR();var me=rec;rec.lang="en-US";rec.continuous=false;rec.interimResults=false;rec.maxAlternatives=1;
     rec.onresult=function(ev){
       var said=ev.results[0][0].transcript;
       answer=lettersFrom(said,cur.w);
       micMsg='Heard: "'+said+'". Fix the box if a letter is wrong, then press Check spelling.';
+      if(rec===me){stopListening();render();}
     };
     rec.onerror=function(ev){
       micMsg=(ev&&(ev.error==="not-allowed"||ev.error==="service-not-allowed"))?"The microphone is blocked. Allow microphone access in your browser, or type the spelling instead.":"I didn't catch that. Press Spell it out loud and say each letter clearly.";
     };
-    rec.onend=function(){listening=false;render();};
+    rec.onend=function(){if(rec===me){rec=null;if(recTimer){clearTimeout(recTimer);recTimer=null;}listening=false;render();}};
     listening=true;micMsg="Listening... say each letter slowly, like R, H, Y, T, H, M.";
-    render();rec.start();
+    render();rec.start();recTimer=setTimeout(function(){if(rec===me){stopListening();if(micMsg.indexOf("Listening")===0)micMsg="I didn’t catch that. Press Spell it out loud and try again.";render();}},10000);
   }catch(e){listening=false;micMsg="The microphone isn't available, so type the spelling instead.";render();}
 }
 
 $("tabAll").onclick=function(){start("all");};
+$("tabHard").onclick=function(){start("hard");};
 $("tabCirc").onclick=function(){start("circled");};
 $("tabMissed").onclick=function(){if(missed.length)start("missed");};
 $("rand").onchange=function(){start(mode);};
 $("clearMissed").onclick=function(){missed=[];saveMissed();if(mode==="missed")mode="all";start(mode);};
-start("all");
+start("hard");
 })();
 </script>
 <script>
