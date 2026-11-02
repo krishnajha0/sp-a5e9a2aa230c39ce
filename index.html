@@ -102,9 +102,9 @@ function reEsc(s){return s.replace(/[.*+?^${}()|[\]\\]/g,"\\$&");}
 function plain(s){var t=String(s).toLowerCase();try{t=t.normalize("NFD").replace(/[\u0300-\u036f]/g,"");}catch(e){}return t;}
 function letters(s){return plain(s).replace(/[^a-z]/g,"");}
 
-function speak(text){
+function speak(text,rate){
   try{var s=window.speechSynthesis;if(!s||!window.SpeechSynthesisUtterance)return false;
-    s.cancel();var u=new SpeechSynthesisUtterance(text);u.rate=0.8;u.lang="en-US";s.speak(u);return true;}catch(e){return false;}
+    s.cancel();var u=new SpeechSynthesisUtterance(text);u.rate=rate||0.65;u.lang="en-US";s.speak(u);return true;}catch(e){return false;}
 }
 
 function lettersFrom(transcript,word){
@@ -167,6 +167,7 @@ function render(){
   if(cur){
     h+='<p class="count">Word '+(pos+1)+' of '+order.length+(cur.c?'<span class="badge">circled</span>':'')+'</p>';
     h+='<div class="row"><button class="btn primary" id="bHear">🔊 Hear the word</button>'+
+       '<button class="btn" id="bSlow">🐢 Say it slower</button>'+
        '<button class="btn" id="bDef">Definition</button>'+
        '<button class="btn" id="bPos">Part of speech</button>'+
        '<button class="btn" id="bSen">Use it in a sentence</button></div>';
@@ -207,6 +208,7 @@ function render(){
 function bind(cur){
   var el;
   if((el=$("bHear")))el.onclick=function(){if(!speak(cur.w)){alert("This browser can't read words out loud. Try Chrome or Safari.");}};
+  if((el=$("bSlow")))el.onclick=function(){if(!speak(cur.w,0.4)){alert("This browser can't read words out loud. Try Chrome or Safari.");}};
   if((el=$("bDef")))el.onclick=function(){reveal("Definition",cur.d);};
   if((el=$("bPos")))el.onclick=function(){reveal("Part of speech",cur.p);};
   if((el=$("bSen")))el.onclick=function(){reveal("Sentence",blank(cur).replace(/_____/g,"blank"));};
