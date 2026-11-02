@@ -28,7 +28,10 @@ h2{font-size:22px;margin:28px 0 10px}
 button.btn{font-size:18px;padding:13px 18px;border-radius:12px;border:2px solid #cfd8e6;background:#fff;color:#1c2430;cursor:pointer;min-height:48px;font-family:inherit}
 button.btn.primary{background:#2f6fed;border-color:#2f6fed;color:#fff}
 button.btn:disabled{opacity:.5;cursor:default}
-button.btn:active{transform:scale(.98)}
+button{-webkit-tap-highlight-color:transparent;touch-action:manipulation;-webkit-user-select:none;user-select:none;transition:transform .08s ease,box-shadow .08s ease,filter .08s ease}
+button.btn,.tab,.rg{box-shadow:0 3px 0 rgba(20,30,50,.18)}
+button:not(:disabled).pressed,button:not(:disabled):active{transform:translateY(2px) scale(.97);box-shadow:0 1px 0 rgba(20,30,50,.18);filter:brightness(.92)}
+button:focus{outline:none}button:focus-visible{outline:3px solid #9bbcf7;outline-offset:2px}
 .clue{background:#eef3fd;border-radius:10px;padding:10px 14px;margin:8px 0;font-size:19px}
 input[type=text]{width:100%;font-size:26px;padding:14px 16px;border:2px solid #cfd8e6;border-radius:12px;letter-spacing:1px;font-family:inherit;margin-top:8px}
 input[type=text]:focus{outline:none;border-color:#2f6fed}
@@ -307,6 +310,27 @@ $("tabMissed").onclick=function(){if(missed.length)start("missed");};
 $("rand").onchange=function(){start(mode);};
 $("clearMissed").onclick=function(){missed=[];saveMissed();if(mode==="missed")mode="all";start(mode);};
 start("all");
+})();
+</script>
+<script>
+(function(){
+  var held=null;
+  function release(){if(held){held.classList.remove("pressed");held=null;}}
+  document.addEventListener("pointerdown",function(e){
+    var b=e.target.closest&&e.target.closest("button");
+    release();
+    if(!b||b.disabled)return;
+    held=b;b.classList.add("pressed");
+  },true);
+  document.addEventListener("pointerup",release,true);
+  document.addEventListener("pointercancel",release,true);
+  document.addEventListener("pointerout",function(e){
+    if(held&&(!e.relatedTarget||!held.contains(e.relatedTarget)))release();
+  },true);
+  document.addEventListener("touchend",release,{capture:true,passive:true});
+  document.addEventListener("touchcancel",release,{capture:true,passive:true});
+  window.addEventListener("blur",release);
+  document.addEventListener("visibilitychange",release);
 })();
 </script>
 </body>
